@@ -1,0 +1,612 @@
+
+  Modifications to workaround this crazy split lock detection thing
+  (on 10+ generation Intel CPUs with 5.18+ kernel version).
+  As a prerequisite, patch manager had to be disabled first.
+  
+  https://www.virtualbox.org/ticket/20180
+  https://www.virtualbox.org/changeset/89975/vbox/trunk
+  https://www.virtualbox.org/changeset/89974/vbox/trunk
+  https://www.virtualbox.org/changeset/89976/vbox/trunk
+  https://www.virtualbox.org/changeset/89993/vbox/trunk
+  https://www.virtualbox.org/changeset/90000/vbox/trunk
+
+--- a/src/VBox/VMM/VMMR3/PATM.cpp	2020-07-09 19:57:56.000000000 +0300
++++ b/src/VBox/VMM/VMMR3/PATM.cpp	2023-03-04 15:56:17.749755086 +0300
+@@ -157,7 +157,6 @@
+     /*
+      * We only need a saved state dummy loader if HM is enabled.
+      */
+-    if (HMIsEnabled(pVM))
+     {
+         pVM->fPATMEnabled = false;
+         return SSMR3RegisterStub(pVM, "PATM", 0);
+@@ -215,16 +214,7 @@
+     AssertRCReturn(rc, rc);
+     pVM->patm.s.PatchLookupTreeGC = MMHyperR3ToRC(pVM, pVM->patm.s.PatchLookupTreeHC);
+ 
+-#ifdef RT_ARCH_AMD64 /* see patmReinit(). */
+-    /* Check CFGM option. */
+-    rc = CFGMR3QueryBool(CFGMR3GetRoot(pVM), "PATMEnabled", &pVM->fPATMEnabled);
+-    if (RT_FAILURE(rc))
+-# ifdef PATM_DISABLE_ALL
+-        pVM->fPATMEnabled = false;
+-# else
+-        pVM->fPATMEnabled = true;
+-# endif
+-#endif
++    pVM->fPATMEnabled = false;
+ 
+     rc = patmReinit(pVM);
+     AssertRC(rc);
+@@ -415,11 +405,7 @@
+      */
+     pVM->patm.s.offVM = RT_UOFFSETOF(VM, patm);
+ 
+-#ifndef RT_ARCH_AMD64 /* would be nice if this was changed everywhere. was driving me crazy on AMD64. */
+-#ifndef PATM_DISABLE_ALL
+-    pVM->fPATMEnabled = true;
+-#endif
+-#endif
++    pVM->fPATMEnabled = false;
+ 
+     Assert(pVM->patm.s.pGCStateHC);
+     memset(pVM->patm.s.pGCStateHC, 0, PAGE_SIZE);
+@@ -1052,10 +1038,8 @@
+     PVM pVM = pUVM->pVM;
+     VM_ASSERT_VALID_EXT_RETURN(pVM, VERR_INVALID_VM_HANDLE);
+ 
+-    if (!HMIsEnabled(pVM))
+-        pVM->fPATMEnabled = fAllowPatching;
+-    else
+-        Assert(!pVM->fPATMEnabled);
++    if (fAllowPatching)
++        return VERR_PATCHING_REFUSED;
+     return VINF_SUCCESS;
+ }
+ 
+@@ -6875,12 +6859,7 @@
+     PVM pVM = pUVM->pVM;
+     VM_ASSERT_VALID_EXT_RETURN(pVM, VERR_INVALID_VM_HANDLE);
+ 
+-    if (HMIsEnabled(pVM))
+-        return DBGCCmdHlpPrintf(pCmdHlp, "PATM is permanently disabled by HM.\n");
+-
+-    PATMR3AllowPatching(pVM->pUVM, true);
+-    RTAvloU32DoWithAll(&pVM->patm.s.PatchLookupTreeHC->PatchTree, true, EnableAllPatches, pVM);
+-    return pCmdHlp->pfnPrintf(pCmdHlp, NULL, "Patching enabled\n");
++    return DBGCCmdHlpPrintf(pCmdHlp, "PATM is permanently disabled.\n");
+ }
+ 
+ #endif /* VBOX_WITH_DEBUGGER */
+--- a/src/VBox/VMM/VMMR3/VM.cpp	2020-07-09 19:57:57.000000000 +0300
++++ b/src/VBox/VMM/VMMR3/VM.cpp	2023-03-04 16:01:07.057757821 +0300
+@@ -782,7 +782,7 @@
+ # ifdef VBOX_WITH_RAW_RING1
+     rc = CFGMR3QueryBoolDef(pRoot, "RawR1Enabled", &pVM->fRawRing1Enabled, false);
+ # endif
+-    rc = CFGMR3QueryBoolDef(pRoot, "PATMEnabled",  &pVM->fPATMEnabled, true);   AssertRCReturn(rc, rc);
++    pVM->fPATMEnabled = false;
+     rc = CFGMR3QueryBoolDef(pRoot, "CSAMEnabled",  &pVM->fCSAMEnabled, true);   AssertRCReturn(rc, rc);
+     rc = CFGMR3QueryBoolDef(pRoot, "HMEnabled",    &pVM->fHMEnabled, true);     AssertRCReturn(rc, rc);
+ #else
+--- a/src/VBox/VMM/VMMAll/IEMAllAImpl.asm	2020-07-09 19:57:52.000000000 +0300
++++ b/src/VBox/VMM/VMMAll/IEMAllAImpl.asm	2023-03-04 02:44:26.525231676 +0300
+@@ -262,6 +262,7 @@
+  %define T1         edi
+  %define T1_32      edi
+  %define T1_16      di
++ %define T1_8       dl
+ %endif
+ 
+ 
+@@ -614,6 +615,45 @@
+ ENDPROC iemAImpl_xchg_u64
+ %endif
+ 
++; Unlocked variants for fDisregardLock mode.
++
++BEGINPROC_FASTCALL iemAImpl_xchg_u8_unlocked, 8
++        PROLOGUE_2_ARGS
++        mov     T0_8, [A1]
++        mov     T1_8, [A0]
++        mov     [A0], T0_8
++        mov     [A1], T1_8
++        EPILOGUE_2_ARGS
++ENDPROC iemAImpl_xchg_u8_unlocked
++
++BEGINPROC_FASTCALL iemAImpl_xchg_u16_unlocked, 8
++        PROLOGUE_2_ARGS
++        mov     T0_16, [A1]
++        mov     T1_16, [A0]
++        mov     [A0], T0_16
++        mov     [A1], T1_16
++        EPILOGUE_2_ARGS
++ENDPROC iemAImpl_xchg_u16_unlocked
++
++BEGINPROC_FASTCALL iemAImpl_xchg_u32_unlocked, 8
++        PROLOGUE_2_ARGS
++        mov     T0_32, [A1]
++        mov     T1_32, [A0]
++        mov     [A0], T0_32
++        mov     [A1], T1_32
++        EPILOGUE_2_ARGS
++ENDPROC iemAImpl_xchg_u32_unlocked
++
++%ifdef RT_ARCH_AMD64
++BEGINPROC_FASTCALL iemAImpl_xchg_u64_unlocked, 8
++        PROLOGUE_2_ARGS
++        mov     T0, [A1]
++        mov     T1, [A0]
++        mov     [A0], T0
++        mov     [A1], T1
++        EPILOGUE_2_ARGS
++ENDPROC iemAImpl_xchg_u64_unlocked
++%endif
+ 
+ ;
+ ; XADD for memory operands.
+--- a/src/VBox/VMM/include/IEMInternal.h	2020-07-09 19:57:59.000000000 +0300
++++ b/src/VBox/VMM/include/IEMInternal.h	2023-03-04 02:59:28.621228233 +0300
+@@ -466,8 +466,8 @@
+ 
+     /** Whether to bypass access handlers or not. */
+     bool                    fBypassHandlers;                                                                /* 0x06 */
+-    /** Indicates that we're interpreting patch code - RC only! */
+-    bool                    fInPatchCode;                                                                   /* 0x07 */
++    /** Whether to disregard the lock prefix (implied or not). */
++    bool                    fDisregardLock;                                                                 /* 0x07 */
+ 
+     /** @name Decoder state.
+      * @{ */
+@@ -1190,6 +1190,10 @@
+ IEM_DECL_IMPL_DEF(void, iemAImpl_xchg_u16,(uint16_t *pu16Mem, uint16_t *pu16Reg));
+ IEM_DECL_IMPL_DEF(void, iemAImpl_xchg_u32,(uint32_t *pu32Mem, uint32_t *pu32Reg));
+ IEM_DECL_IMPL_DEF(void, iemAImpl_xchg_u64,(uint64_t *pu64Mem, uint64_t *pu64Reg));
++IEM_DECL_IMPL_DEF(void, iemAImpl_xchg_u8_unlocked, (uint8_t  *pu8Mem,  uint8_t  *pu8Reg));
++IEM_DECL_IMPL_DEF(void, iemAImpl_xchg_u16_unlocked,(uint16_t *pu16Mem, uint16_t *pu16Reg));
++IEM_DECL_IMPL_DEF(void, iemAImpl_xchg_u32_unlocked,(uint32_t *pu32Mem, uint32_t *pu32Reg));
++IEM_DECL_IMPL_DEF(void, iemAImpl_xchg_u64_unlocked,(uint64_t *pu64Mem, uint64_t *pu64Reg));
+ /** @}  */
+ 
+ /** @name Exchange and add operations.
+--- a/src/VBox/VMM/VMMAll/IEMAllAImplC.cpp	2020-07-09 19:57:52.000000000 +0300
++++ b/src/VBox/VMM/VMMAll/IEMAllAImplC.cpp	2023-03-04 19:44:14.249884397 +0300
+@@ -1129,6 +1129,15 @@
+     *puReg = uOldMem;
+ }
+ 
++IEM_DECL_IMPL_DEF(void, iemAImpl_xchg_u64_unlocked,(uint64_t *puMem, uint64_t *puReg))
++{
++    /* Quite doubious, as well as the above one actually, but this 
++       is to only fix 32-bit compilation so likely irrelevant 
++       for any real use case anyway. */
++    uint64_t uOldMem = *puMem;
++    *puMem = *puReg;
++    *puReg = uOldMem;
++}
+ 
+ #endif /* RT_ARCH_X86 */
+ #ifdef RT_ARCH_X86
+--- a/src/VBox/VMM/VMMAll/IEMAllInstructionsOneByte.cpp.h	2020-07-09 19:57:53.000000000 +0300
++++ b/src/VBox/VMM/VMMAll/IEMAllInstructionsOneByte.cpp.h	2023-03-04 03:10:21.869225740 +0300
+@@ -3623,7 +3623,10 @@
+         IEM_MC_CALC_RM_EFF_ADDR(GCPtrEffDst, bRm, 0);
+         IEM_MC_MEM_MAP(pu8Mem, IEM_ACCESS_DATA_RW, pVCpu->iem.s.iEffSeg, GCPtrEffDst, 0 /*arg*/);
+         IEM_MC_REF_GREG_U8(pu8Reg, ((bRm >> X86_MODRM_REG_SHIFT) & X86_MODRM_REG_SMASK) | pVCpu->iem.s.uRexReg);
++    if (!pVCpu->iem.s.fDisregardLock)
+         IEM_MC_CALL_VOID_AIMPL_2(iemAImpl_xchg_u8, pu8Mem, pu8Reg);
++    else
++        IEM_MC_CALL_VOID_AIMPL_2(iemAImpl_xchg_u8_unlocked, pu8Mem, pu8Reg);
+         IEM_MC_MEM_COMMIT_AND_UNMAP(pu8Mem, IEM_ACCESS_DATA_RW);
+ 
+         IEM_MC_ADVANCE_RIP();
+@@ -3712,7 +3715,10 @@
+                 IEM_MC_CALC_RM_EFF_ADDR(GCPtrEffDst, bRm, 0);
+                 IEM_MC_MEM_MAP(pu16Mem, IEM_ACCESS_DATA_RW, pVCpu->iem.s.iEffSeg, GCPtrEffDst, 0 /*arg*/);
+                 IEM_MC_REF_GREG_U16(pu16Reg, ((bRm >> X86_MODRM_REG_SHIFT) & X86_MODRM_REG_SMASK) | pVCpu->iem.s.uRexReg);
++            if (!pVCpu->iem.s.fDisregardLock)
+                 IEM_MC_CALL_VOID_AIMPL_2(iemAImpl_xchg_u16, pu16Mem, pu16Reg);
++            else
++                IEM_MC_CALL_VOID_AIMPL_2(iemAImpl_xchg_u16_unlocked, pu16Mem, pu16Reg);
+                 IEM_MC_MEM_COMMIT_AND_UNMAP(pu16Mem, IEM_ACCESS_DATA_RW);
+ 
+                 IEM_MC_ADVANCE_RIP();
+@@ -3728,7 +3734,10 @@
+                 IEM_MC_CALC_RM_EFF_ADDR(GCPtrEffDst, bRm, 0);
+                 IEM_MC_MEM_MAP(pu32Mem, IEM_ACCESS_DATA_RW, pVCpu->iem.s.iEffSeg, GCPtrEffDst, 0 /*arg*/);
+                 IEM_MC_REF_GREG_U32(pu32Reg, ((bRm >> X86_MODRM_REG_SHIFT) & X86_MODRM_REG_SMASK) | pVCpu->iem.s.uRexReg);
++            if (!pVCpu->iem.s.fDisregardLock)
+                 IEM_MC_CALL_VOID_AIMPL_2(iemAImpl_xchg_u32, pu32Mem, pu32Reg);
++            else
++                IEM_MC_CALL_VOID_AIMPL_2(iemAImpl_xchg_u32_unlocked, pu32Mem, pu32Reg);
+                 IEM_MC_MEM_COMMIT_AND_UNMAP(pu32Mem, IEM_ACCESS_DATA_RW);
+ 
+                 IEM_MC_CLEAR_HIGH_GREG_U64_BY_REF(pu32Reg);
+@@ -3745,7 +3754,10 @@
+                 IEM_MC_CALC_RM_EFF_ADDR(GCPtrEffDst, bRm, 0);
+                 IEM_MC_MEM_MAP(pu64Mem, IEM_ACCESS_DATA_RW, pVCpu->iem.s.iEffSeg, GCPtrEffDst, 0 /*arg*/);
+                 IEM_MC_REF_GREG_U64(pu64Reg, ((bRm >> X86_MODRM_REG_SHIFT) & X86_MODRM_REG_SMASK) | pVCpu->iem.s.uRexReg);
++            if (!pVCpu->iem.s.fDisregardLock)
+                 IEM_MC_CALL_VOID_AIMPL_2(iemAImpl_xchg_u64, pu64Mem, pu64Reg);
++            else
++                IEM_MC_CALL_VOID_AIMPL_2(iemAImpl_xchg_u64_unlocked, pu64Mem, pu64Reg);
+                 IEM_MC_MEM_COMMIT_AND_UNMAP(pu64Mem, IEM_ACCESS_DATA_RW);
+ 
+                 IEM_MC_ADVANCE_RIP();
+@@ -10572,6 +10584,7 @@
+ FNIEMOP_DEF(iemOp_lock)
+ {
+     IEMOP_HLP_CLEAR_REX_NOT_BEFORE_OPCODE("lock");
++    if (!pVCpu->iem.s.fDisregardLock)
+     pVCpu->iem.s.fPrefixes |= IEM_OP_PRF_LOCK;
+ 
+     uint8_t b; IEM_OPCODE_GET_NEXT_U8(&b);
+--- a/include/VBox/vmm/iem.h	2020-07-09 19:49:51.000000000 +0300
++++ b/include/VBox/vmm/iem.h	2023-03-04 03:13:41.289224979 +0300
+@@ -186,6 +186,7 @@
+ VMMDECL(VBOXSTRICTRC)       IEMExecOneBypassWithPrefetchedByPCWritten(PVMCPU pVCpu, PCPUMCTXCORE pCtxCore, uint64_t OpcodeBytesPC,
+                                                                       const void *pvOpcodeBytes, size_t cbOpcodeBytes,
+                                                                       uint32_t *pcbWritten);
++VMMDECL(VBOXSTRICTRC)       IEMExecOneIgnoreLock(PVMCPU pVCpu);
+ VMMDECL(VBOXSTRICTRC)       IEMExecLots(PVMCPU pVCpu, uint32_t *pcInstructions);
+ VMMDECL(VBOXSTRICTRC)       IEMInjectTrpmEvent(PVMCPU pVCpu);
+ VMM_INT_DECL(VBOXSTRICTRC)  IEMInjectTrap(PVMCPU pVCpu, uint8_t u8TrapNo, TRPMEVENT enmType, uint16_t uErrCode, RTGCPTR uCr2,
+--- a/src/VBox/VMM/VMMAll/IEMAll.cpp	2020-07-09 19:57:52.000000000 +0300
++++ b/src/VBox/VMM/VMMAll/IEMAll.cpp	2023-03-04 03:36:31.957219747 +0300
+@@ -1025,11 +1025,6 @@
+     pVCpu->iem.s.rcPassUp           = VINF_SUCCESS;
+     pVCpu->iem.s.fBypassHandlers    = fBypassHandlers;
+ #ifdef VBOX_WITH_RAW_MODE_NOT_R0
+-    pVCpu->iem.s.fInPatchCode       = pVCpu->iem.s.uCpl == 0
+-                               && pCtx->cs.u64Base == 0
+-                               && pCtx->cs.u32Limit == UINT32_MAX
+-                               && PATMIsPatchGCAddr(pVCpu->CTX_SUFF(pVM), pCtx->eip);
+-    if (!pVCpu->iem.s.fInPatchCode)
+         CPUMRawLeave(pVCpu, VINF_SUCCESS);
+ #endif
+ 
+@@ -1086,7 +1081,6 @@
+  */
+ DECLINLINE(void) iemUninitExec(PVMCPU pVCpu)
+ {
+-    /* Note! do not touch fInPatchCode here! (see iemUninitExecAndFiddleStatusAndMaybeReenter) */
+ #ifdef IEM_VERIFICATION_MODE_FULL
+     pVCpu->iem.s.fNoRem = pVCpu->iem.s.fNoRemSavedByExec;
+ #endif
+@@ -1111,7 +1105,7 @@
+  *                              calling thread.
+  * @param   fBypassHandlers     Whether to bypass access handlers.
+  */
+-DECLINLINE(void) iemInitDecoder(PVMCPU pVCpu, bool fBypassHandlers)
++DECLINLINE(void) iemInitDecoder(PVMCPU pVCpu, bool fBypassHandlers, bool fDisregardLock)
+ {
+     PCPUMCTX const pCtx = IEM_GET_CTX(pVCpu);
+ 
+@@ -1176,12 +1170,8 @@
+     pVCpu->iem.s.iNextMapping       = 0;
+     pVCpu->iem.s.rcPassUp           = VINF_SUCCESS;
+     pVCpu->iem.s.fBypassHandlers    = fBypassHandlers;
++    pVCpu->iem.s.fDisregardLock     = fDisregardLock;
+ #ifdef VBOX_WITH_RAW_MODE_NOT_R0
+-    pVCpu->iem.s.fInPatchCode       = pVCpu->iem.s.uCpl == 0
+-                               && pCtx->cs.u64Base == 0
+-                               && pCtx->cs.u32Limit == UINT32_MAX
+-                               && PATMIsPatchGCAddr(pVCpu->CTX_SUFF(pVM), pCtx->eip);
+-    if (!pVCpu->iem.s.fInPatchCode)
+         CPUMRawLeave(pVCpu, VINF_SUCCESS);
+ #endif
+ 
+@@ -1293,17 +1283,6 @@
+     Assert(pVCpu->iem.s.rcPassUp   == VINF_SUCCESS);
+     Assert(pVCpu->iem.s.fBypassHandlers == false);
+ #ifdef VBOX_WITH_RAW_MODE_NOT_R0
+-    if (!pVCpu->iem.s.fInPatchCode)
+-    { /* likely */ }
+-    else
+-    {
+-        pVCpu->iem.s.fInPatchCode   = pVCpu->iem.s.uCpl == 0
+-                               && pCtx->cs.u64Base == 0
+-                               && pCtx->cs.u32Limit == UINT32_MAX
+-                               && PATMIsPatchGCAddr(pVCpu->CTX_SUFF(pVM), pCtx->eip);
+-        if (!pVCpu->iem.s.fInPatchCode)
+-            CPUMRawLeave(pVCpu, VINF_SUCCESS);
+-    }
+ #endif
+ 
+ #ifdef DBGFTRACE_ENABLED
+@@ -1332,12 +1311,12 @@
+  *                              calling thread.
+  * @param   fBypassHandlers     Whether to bypass access handlers.
+  */
+-IEM_STATIC VBOXSTRICTRC iemInitDecoderAndPrefetchOpcodes(PVMCPU pVCpu, bool fBypassHandlers)
++IEM_STATIC VBOXSTRICTRC iemInitDecoderAndPrefetchOpcodes(PVMCPU pVCpu, bool fBypassHandlers, bool fDisregardLock)
+ {
+ #ifdef IEM_VERIFICATION_MODE_FULL
+     uint8_t const cbOldOpcodes = pVCpu->iem.s.cbOpcode;
+ #endif
+-    iemInitDecoder(pVCpu, fBypassHandlers);
++    iemInitDecoder(pVCpu, fBypassHandlers, fDisregardLock);
+ 
+ #ifdef IEM_WITH_CODE_TLB
+     /** @todo Do ITLB lookup here. */
+@@ -1382,14 +1361,6 @@
+ # ifdef VBOX_WITH_RAW_MODE_NOT_R0
+     /* Allow interpretation of patch manager code blocks since they can for
+        instance throw #PFs for perfectly good reasons. */
+-    if (pVCpu->iem.s.fInPatchCode)
+-    {
+-        size_t cbRead = 0;
+-        int rc = PATMReadPatchCode(pVCpu->CTX_SUFF(pVM), GCPtrPC, pVCpu->iem.s.abOpcode, sizeof(pVCpu->iem.s.abOpcode), &cbRead);
+-        AssertRCReturn(rc, rc);
+-        pVCpu->iem.s.cbOpcode = (uint8_t)cbRead; Assert(pVCpu->iem.s.cbOpcode == cbRead); Assert(cbRead > 0);
+-        return VINF_SUCCESS;
+-    }
+ # endif /* VBOX_WITH_RAW_MODE_NOT_R0 */
+ 
+     RTGCPHYS    GCPhys;
+@@ -1997,14 +1968,6 @@
+ # ifdef VBOX_WITH_RAW_MODE_NOT_R0
+     /* Allow interpretation of patch manager code blocks since they can for
+        instance throw #PFs for perfectly good reasons. */
+-    if (pVCpu->iem.s.fInPatchCode)
+-    {
+-        size_t cbRead = 0;
+-        int rc = PATMReadPatchCode(pVCpu->CTX_SUFF(pVM), GCPtrNext, pVCpu->iem.s.abOpcode, cbToTryRead, &cbRead);
+-        AssertRCReturn(rc, rc);
+-        pVCpu->iem.s.cbOpcode = (uint8_t)cbRead; Assert(pVCpu->iem.s.cbOpcode == cbRead); Assert(cbRead > 0);
+-        return VINF_SUCCESS;
+-    }
+ # endif /* VBOX_WITH_RAW_MODE_NOT_R0 */
+ 
+     RTGCPHYS    GCPhys;
+@@ -14948,7 +14911,7 @@
+         && VMCPU_FF_IS_SET(pVCpu, VMCPU_FF_INHIBIT_INTERRUPTS)
+         && EMGetInhibitInterruptsPC(pVCpu) == IEM_GET_CTX(pVCpu)->rip )
+     {
+-        rcStrict = iemInitDecoderAndPrefetchOpcodes(pVCpu, pVCpu->iem.s.fBypassHandlers);
++        rcStrict = iemInitDecoderAndPrefetchOpcodes(pVCpu, pVCpu->iem.s.fBypassHandlers, false);
+         if (rcStrict == VINF_SUCCESS)
+         {
+ #ifdef LOG_ENABLED
+@@ -15007,8 +14970,8 @@
+  */
+ DECLINLINE(VBOXSTRICTRC) iemRCRawMaybeReenter(PVMCPU pVCpu, PCPUMCTX pCtx, VBOXSTRICTRC rcStrict)
+ {
+-    if (   !pVCpu->iem.s.fInPatchCode
+-        && (   rcStrict == VINF_SUCCESS
++    if (
++         (   rcStrict == VINF_SUCCESS
+             || rcStrict == VERR_IEM_INSTR_NOT_IMPLEMENTED  /* pgmPoolAccessPfHandlerFlush */
+             || rcStrict == VERR_IEM_ASPECT_NOT_IMPLEMENTED /* ditto */ ) )
+     {
+@@ -15045,7 +15008,7 @@
+     /*
+      * Do the decoding and emulation.
+      */
+-    VBOXSTRICTRC rcStrict = iemInitDecoderAndPrefetchOpcodes(pVCpu, false);
++    VBOXSTRICTRC rcStrict = iemInitDecoderAndPrefetchOpcodes(pVCpu, false, false);
+     if (rcStrict == VINF_SUCCESS)
+         rcStrict = iemExecOneInner(pVCpu, true);
+ 
+@@ -15073,7 +15036,7 @@
+     AssertReturn(CPUMCTX2CORE(pCtx) == pCtxCore, VERR_IEM_IPE_3);
+ 
+     uint32_t const cbOldWritten = pVCpu->iem.s.cbWritten;
+-    VBOXSTRICTRC rcStrict = iemInitDecoderAndPrefetchOpcodes(pVCpu, false);
++    VBOXSTRICTRC rcStrict = iemInitDecoderAndPrefetchOpcodes(pVCpu, false, false);
+     if (rcStrict == VINF_SUCCESS)
+     {
+         rcStrict = iemExecOneInner(pVCpu, true);
+@@ -15098,7 +15061,7 @@
+     if (   cbOpcodeBytes
+         && pCtx->rip == OpcodeBytesPC)
+     {
+-        iemInitDecoder(pVCpu, false);
++        iemInitDecoder(pVCpu, false, false);
+ #ifdef IEM_WITH_CODE_TLB
+         pVCpu->iem.s.uInstrBufPc      = OpcodeBytesPC;
+         pVCpu->iem.s.pbInstrBuf       = (uint8_t const *)pvOpcodeBytes;
+@@ -15112,7 +15075,7 @@
+         rcStrict = VINF_SUCCESS;
+     }
+     else
+-        rcStrict = iemInitDecoderAndPrefetchOpcodes(pVCpu, false);
++        rcStrict = iemInitDecoderAndPrefetchOpcodes(pVCpu, false, false);
+     if (rcStrict == VINF_SUCCESS)
+     {
+         rcStrict = iemExecOneInner(pVCpu, true);
+@@ -15131,7 +15094,7 @@
+     AssertReturn(CPUMCTX2CORE(pCtx) == pCtxCore, VERR_IEM_IPE_3);
+ 
+     uint32_t const cbOldWritten = pVCpu->iem.s.cbWritten;
+-    VBOXSTRICTRC rcStrict = iemInitDecoderAndPrefetchOpcodes(pVCpu, true);
++    VBOXSTRICTRC rcStrict = iemInitDecoderAndPrefetchOpcodes(pVCpu, true, false);
+     if (rcStrict == VINF_SUCCESS)
+     {
+         rcStrict = iemExecOneInner(pVCpu, false);
+@@ -15156,7 +15119,7 @@
+     if (   cbOpcodeBytes
+         && pCtx->rip == OpcodeBytesPC)
+     {
+-        iemInitDecoder(pVCpu, true);
++        iemInitDecoder(pVCpu, true, false);
+ #ifdef IEM_WITH_CODE_TLB
+         pVCpu->iem.s.uInstrBufPc      = OpcodeBytesPC;
+         pVCpu->iem.s.pbInstrBuf       = (uint8_t const *)pvOpcodeBytes;
+@@ -15170,7 +15133,7 @@
+         rcStrict = VINF_SUCCESS;
+     }
+     else
+-        rcStrict = iemInitDecoderAndPrefetchOpcodes(pVCpu, true);
++        rcStrict = iemInitDecoderAndPrefetchOpcodes(pVCpu, true, false);
+     if (rcStrict == VINF_SUCCESS)
+         rcStrict = iemExecOneInner(pVCpu, false);
+ 
+@@ -15206,7 +15169,7 @@
+     if (   cbOpcodeBytes
+         && pCtx->rip == OpcodeBytesPC)
+     {
+-        iemInitDecoder(pVCpu, true);
++        iemInitDecoder(pVCpu, true, false);
+ #ifdef IEM_WITH_CODE_TLB
+         pVCpu->iem.s.uInstrBufPc      = OpcodeBytesPC;
+         pVCpu->iem.s.pbInstrBuf       = (uint8_t const *)pvOpcodeBytes;
+@@ -15220,7 +15183,7 @@
+         rcStrict = VINF_SUCCESS;
+     }
+     else
+-        rcStrict = iemInitDecoderAndPrefetchOpcodes(pVCpu, true);
++        rcStrict = iemInitDecoderAndPrefetchOpcodes(pVCpu, true, false);
+     if (rcStrict == VINF_SUCCESS)
+     {
+         rcStrict = iemExecOneInner(pVCpu, false);
+@@ -15234,6 +15197,21 @@
+     return rcStrict;
+ }
+ 
++VMMDECL(VBOXSTRICTRC) IEMExecOneIgnoreLock(PVMCPU pVCpu)
++{
++    /*
++     * Do the decoding and emulation.
++     */
++    VBOXSTRICTRC rcStrict = iemInitDecoderAndPrefetchOpcodes(pVCpu, false, true /*fDisregardLock*/);
++    if (rcStrict == VINF_SUCCESS)
++        rcStrict = iemExecOneInner(pVCpu, true);
++    else if (pVCpu->iem.s.cActiveMappings > 0)
++        iemMemRollback(pVCpu);
++
++    if (rcStrict != VINF_SUCCESS)
++        LogFlow(("IEMExecOneIgnoreLock failed: rcStrict=%Rrc\n", VBOXSTRICTRC_VAL(rcStrict)));
++     return rcStrict;
++}
+ 
+ VMMDECL(VBOXSTRICTRC) IEMExecLots(PVMCPU pVCpu, uint32_t *pcInstructions)
+ {
+@@ -15285,7 +15263,7 @@
+     /*
+      * Do the decoding and emulation.
+      */
+-    VBOXSTRICTRC rcStrict = iemInitDecoderAndPrefetchOpcodes(pVCpu, false);
++    VBOXSTRICTRC rcStrict = iemInitDecoderAndPrefetchOpcodes(pVCpu, false, false);
+     if (rcStrict == VINF_SUCCESS)
+         rcStrict = iemExecOneInner(pVCpu, true);
+ 
+@@ -15344,7 +15322,7 @@
+     /*
+      * Initial decoder init w/ prefetch, then setup setjmp.
+      */
+-    VBOXSTRICTRC rcStrict = iemInitDecoderAndPrefetchOpcodes(pVCpu, false);
++    VBOXSTRICTRC rcStrict = iemInitDecoderAndPrefetchOpcodes(pVCpu, false, false);
+     if (rcStrict == VINF_SUCCESS)
+     {
+ # ifdef IEM_WITH_SETJMP
+@@ -15491,7 +15469,7 @@
+ VMM_INT_DECL(VBOXSTRICTRC) IEMInjectTrap(PVMCPU pVCpu, uint8_t u8TrapNo, TRPMEVENT enmType, uint16_t uErrCode, RTGCPTR uCr2,
+                                          uint8_t cbInstr)
+ {
+-    iemInitDecoder(pVCpu, false);
++    iemInitDecoder(pVCpu, false, false);
+ #ifdef DBGFTRACE_ENABLED
+     RTTraceBufAddMsgF(pVCpu->CTX_SUFF(pVM)->CTX_SUFF(hTraceBuf), "IEMInjectTrap: %x %d %x %llx",
+                       u8TrapNo, enmType, uErrCode, uCr2);
+--- a/include/VBox/err.h	2023-03-03 23:38:01.000000000 +0300
++++ b/include/VBox/err.h	2023-03-04 00:16:09.637265634 +0300
+@@ -252,6 +252,8 @@
+ #define VINF_EM_RAW_INJECT_TRPM_EVENT       1157
+ /** Guest tried to trigger a CPU hang.  The guest is probably up to no good. */
+ #define VERR_EM_GUEST_CPU_HANG              (-1158)
++/** Emulate split-lock access on SMP. */
++#define VINF_EM_EMULATE_SPLIT_LOCK           1162
+ /** @} */
+ 
+ 
+--- a/src/VBox/VMM/include/EMInternal.h	2020-07-09 19:57:59.000000000 +0300
++++ b/src/VBox/VMM/include/EMInternal.h	2023-03-04 00:22:27.533264191 +0300
+@@ -465,6 +465,7 @@
+ int     emR3RawStep(PVM pVM, PVMCPU pVCpu);
+ int     emR3SingleStepExecRem(PVM pVM, PVMCPU pVCpu, uint32_t cIterations);
+ bool    emR3IsExecutionAllowed(PVM pVM, PVMCPU pVCpu);
++int     emR3ExecuteSplitLockInstruction(PVM pVM, PVMCPU pVCpu);
+ 
+ RT_C_DECLS_END
+ 
+--- a/src/VBox/VMM/include/EMHandleRCTmpl.h	2020-07-09 19:57:59.000000000 +0300
++++ b/src/VBox/VMM/include/EMHandleRCTmpl.h	2023-03-04 00:27:54.437262943 +0300
+@@ -318,6 +318,9 @@
+                 rc = emR3ExecuteInstruction(pVM, pVCpu, "EVENT: ");
+             break;
+ 
++        case VINF_EM_EMULATE_SPLIT_LOCK:
++            rc = VBOXSTRICTRC_TODO(emR3ExecuteSplitLockInstruction(pVM, pVCpu));
++            break;
+ 
+ #ifdef EMHANDLERC_WITH_PATM
+         /*
+--- a/src/VBox/VMM/VMMR0/HMVMXR0.cpp	2020-07-09 19:57:54.000000000 +0300
++++ b/src/VBox/VMM/VMMR0/HMVMXR0.cpp	2023-03-04 00:58:09.885256014 +0300
+@@ -13365,10 +13365,28 @@
+     RT_NOREF_PV(pMixedCtx);
+     HMVMX_VALIDATE_EXIT_XCPT_HANDLER_PARAMS();
+ 
++    int rc = hmR0VmxSaveGuestCR0(pVCpu, pMixedCtx)
++           | hmR0VmxSaveGuestRflags(pVCpu, pMixedCtx)
++           | hmR0VmxSaveGuestSegmentRegs(pVCpu, pMixedCtx);
++    AssertRCReturn(rc, rc);
++    if (   /* 1. If 486-style alignment checks aren't enabled, then this must be a split-lock exception */
++           !(pMixedCtx->cr0 & X86_CR0_AM)
++           /* 2. #AC cannot happen in rings 0-2 except for split-lock detection. */
++        || CPUMGetGuestCPL(pVCpu) != 3
++           /* 3. When the EFLAGS.AC != 0 this can only be a split-lock case. */
++        || !(pMixedCtx->eflags.u32 & X86_EFL_AC) )
++    {
++        rc = hmR0VmxSaveGuestState(pVCpu, pMixedCtx);
++        AssertRCReturn(rc, rc);
++        Log8Func(("cs:rip=%#04x:%#RX64 rflags=%#RX64 cr0=%#RX64 split-lock #AC -> VINF_EM_EMULATE_SPLIT_LOCK\n",
++                  pVCpu->cpum.GstCtx.cs.Sel, pVCpu->cpum.GstCtx.rip, pVCpu->cpum.GstCtx.rflags, pVCpu->cpum.GstCtx.cr0));
++        return VINF_EM_EMULATE_SPLIT_LOCK;
++    }
++
+     /*
+      * Re-inject it. We'll detect any nesting before getting here.
+      */
+-    int rc = hmR0VmxReadExitIntErrorCodeVmcs(pVmxTransient);
++    rc = hmR0VmxReadExitIntErrorCodeVmcs(pVmxTransient);
+     rc    |= hmR0VmxReadExitInstrLenVmcs(pVmxTransient);
+     AssertRCReturn(rc, rc);
+     Assert(pVmxTransient->fVmcsFieldsRead & HMVMX_UPDATED_TRANSIENT_EXIT_INTERRUPTION_INFO);
+--- a/src/VBox/VMM/VMMR3/EM.cpp	2020-07-09 19:57:55.000000000 +0300
++++ b/src/VBox/VMM/VMMR3/EM.cpp	2023-03-04 01:00:42.593255431 +0300
+@@ -793,6 +793,33 @@
+ }
+ #endif /* LOG_ENABLED || VBOX_STRICT */
+ 
++/**
++ * @callback_method_impl{FNVMMEMTRENDEZVOUS,
++ * Worker for emR3ExecuteSplitLockInstruction}
++ */
++static DECLCALLBACK(VBOXSTRICTRC) emR3ExecuteSplitLockInstructionRendezvous(PVM pVM, PVMCPU pVCpu, void *pvUser)
++{
++    /* Only execute on the specified EMT. */
++    if (pVCpu == (PVMCPU)pvUser)
++    {
++        LogFunc(("\n"));
++        VBOXSTRICTRC rcStrict = IEMExecOneIgnoreLock(pVCpu);
++        LogFunc(("rcStrict=%Rrc\n", VBOXSTRICTRC_VAL(rcStrict)));
++        if (rcStrict == VINF_IEM_RAISED_XCPT)
++            rcStrict = VINF_SUCCESS;
++        return rcStrict;
++    }
++    RT_NOREF(pVM);
++    return VINF_SUCCESS;
++}
++
++
++VBOXSTRICTRC emR3ExecuteSplitLockInstruction(PVM pVM, PVMCPU pVCpu)
++{
++    LogFunc(("\n"));
++    return VMMR3EmtRendezvous(pVM, VMMEMTRENDEZVOUS_FLAGS_TYPE_ALL_AT_ONCE, emR3ExecuteSplitLockInstructionRendezvous, pVCpu);
++}
++
+ 
+ /**
+  * Debug loop.

@@ -1,0 +1,51 @@
+--- VirtualBox-5.2.44_old/src/VBox/Frontends/VirtualBox/src/globals/UIImageTools.cpp	2022-08-15 15:42:19.869442924 +0300
++++ VirtualBox-5.2.44_new/src/VBox/Frontends/VirtualBox/src/globals/UIImageTools.cpp	2022-08-15 15:42:42.205443562 +0300
+@@ -24,6 +24,8 @@
+ 
+ /* Qt includes */
+ # include <QPainter>
++# include <QPainterPath>
++# include <QPainterPathStroker>
+ 
+ #endif /* !VBOX_WITH_PRECOMPILED_HEADERS */
+ 
+--- VirtualBox-5.2.44_old/src/VBox/Frontends/VirtualBox/src/widgets/UIPopupBox.cpp	2022-08-15 16:01:57.317476563 +0300
++++ VirtualBox-5.2.44_new/src/VBox/Frontends/VirtualBox/src/widgets/UIPopupBox.cpp	2022-08-15 16:03:20.381478936 +0300
+@@ -24,6 +24,7 @@
+ # include <QStyle>
+ # include <QLabel>
+ # include <QPainter>
++# include <QPainterPath>
+ # include <QVBoxLayout>
+ # include <QPaintEvent>
+ 
+--- VirtualBox-5.2.44_old/src/VBox/Frontends/VirtualBox/src/widgets/UIPopupBox.h	2022-08-15 16:43:51.645548397 +0300
++++ VirtualBox-5.2.44_new/src/VBox/Frontends/VirtualBox/src/widgets/UIPopupBox.h	2022-08-15 16:44:29.801549487 +0300
+@@ -21,6 +21,7 @@
+ /* Global includes: */
+ #include <QIcon>
+ #include <QWidget>
++#include <QPainterPath>
+ 
+ /* Forward declarations: */
+ class QLabel;
+--- VirtualBox-5.2.44_old/src/VBox/Frontends/VirtualBox/src/widgets/UIMenuToolBar.cpp	2022-08-15 16:14:15.841497662 +0300
++++ VirtualBox-5.2.44_new/src/VBox/Frontends/VirtualBox/src/widgets/UIMenuToolBar.cpp	2022-08-15 16:15:04.237499045 +0300
+@@ -23,6 +23,7 @@
+ # include <QApplication>
+ # include <QHBoxLayout>
+ # include <QPainter>
++# include <QPainterPath>
+ # include <QStyle>
+ # include <QToolButton>
+ 
+--- VirtualBox-5.2.44_old/src/VBox/Frontends/VirtualBox/src/widgets/UIMiniToolBar.cpp	2022-08-15 16:25:00.833516090 +0300
++++ VirtualBox-5.2.44_new/src/VBox/Frontends/VirtualBox/src/widgets/UIMiniToolBar.cpp	2022-08-15 16:25:23.229516729 +0300
+@@ -28,6 +28,7 @@
+ # include <QToolButton>
+ # include <QStateMachine>
+ # include <QPainter>
++# include <QPainterPath>
+ # include <QWindow>
+ # ifdef VBOX_WS_X11
+ #  include <QWindowStateChangeEvent>

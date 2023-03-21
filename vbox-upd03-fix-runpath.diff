@@ -1,0 +1,20 @@
+--- a/Config.kmk	2022-08-16 17:24:50.255229142 +0300
++++ b/Config.kmk	2022-08-16 20:38:34.219128045 +0300
+@@ -1211,7 +1211,7 @@
+ #
+ ifdef VBOX_WITHOUT_HARDENING
+  VBOX_WITH_HARDENING=
+- ifeq ($(VBOX_WITH_HARDENING),)
++ if 0
+   VBOX_PATH_APP_PRIVATE=
+   VBOX_PATH_APP_PRIVATE_ARCH=
+   VBOX_PATH_APP_PRIVATE_ARCH_TOP=
+@@ -1224,6 +1224,8 @@
+  endif
+ endif
+ 
++$(warning Note: VBOX_WITH_RUNPATH='$(VBOX_WITH_RUNPATH)' , VBOX_WITH_ORIGIN='$(VBOX_WITH_ORIGIN)' )
++
+ #
+ # Sanitize the additions build config variables.
+ #

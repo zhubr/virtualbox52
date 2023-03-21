@@ -1,0 +1,12 @@
+diff -urN VirtualBox-5.1.38.old/src/VBox/Main/Makefile.kmk VirtualBox-5.1.38/src/VBox/Main/Makefile.kmk
+--- VirtualBox-5.1.38.old/src/VBox/Main/Makefile.kmk	2015-07-11 13:17:27.573698915 +0200
++++ VirtualBox-5.1.38/src/VBox/Main/Makefile.kmk	2015-07-11 14:34:21.357349819 +0200
+@@ -1524,7 +1524,7 @@
+ 	$(QUIET)$(VBOX_XSLTPROC) --stringparam KBUILD_HOST $(KBUILD_HOST) \
+ 		--stringparam generating "dtrace-probes" \
+ 		-o "$@" $(VBoxAPIWrap_VBOX_XSLT) $(VBOX_XIDL_FILE)
+-	$(QUIET)$(SED) -e '' -o "$@.tmp" \
++	$(QUIET)$(SED) -e '' --output "$@.tmp" \
+ 		"$(VBOX_PATH_MAIN_SRC)/src-all/VBoxAPI-start.d" \
+ 		"$@" \
+ 		"$(VBOX_PATH_MAIN_SRC)/src-all/VBoxAPI-end.d"

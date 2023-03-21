@@ -1,0 +1,80 @@
+--- a/src/VBox/Frontends/VirtualBox/src/globals/UIDesktopWidgetWatchdog.cpp	2020-07-09 19:56:44.000000000 +0300
++++ b/src/VBox/Frontends/VirtualBox/src/globals/UIDesktopWidgetWatchdog.cpp	2023-03-02 20:26:12.709712200 +0300
+@@ -378,8 +378,10 @@
+     /* Listen for screen signals: */
+     connect(pHostScreen, &QScreen::geometryChanged,
+             this, &UIDesktopWidgetWatchdog::sltHandleHostScreenResized);
++#if QT_VERSION > QT_VERSION_CHECK(5, 4, 0)
+     connect(pHostScreen, &QScreen::availableGeometryChanged,
+             this, &UIDesktopWidgetWatchdog::sltHandleHostScreenWorkAreaResized);
++#endif
+ 
+ # ifdef VBOX_WS_X11
+     /* Update host-screen configuration: */
+@@ -397,8 +399,10 @@
+     /* Forget about screen signals: */
+     disconnect(pHostScreen, &QScreen::geometryChanged,
+                this, &UIDesktopWidgetWatchdog::sltHandleHostScreenResized);
++#if QT_VERSION > QT_VERSION_CHECK(5, 4, 0)
+     disconnect(pHostScreen, &QScreen::availableGeometryChanged,
+                this, &UIDesktopWidgetWatchdog::sltHandleHostScreenWorkAreaResized);
++#endif
+ 
+ # ifdef VBOX_WS_X11
+     /* Update host-screen configuration: */
+@@ -483,14 +487,18 @@
+     /* Prepare connections: */
+     connect(qApp, &QGuiApplication::screenAdded,
+             this, &UIDesktopWidgetWatchdog::sltHostScreenAdded);
++#if QT_VERSION > QT_VERSION_CHECK(5, 4, 0)
+     connect(qApp, &QGuiApplication::screenRemoved,
+             this, &UIDesktopWidgetWatchdog::sltHostScreenRemoved);
++#endif
+     foreach (QScreen *pHostScreen, qApp->screens())
+     {
+         connect(pHostScreen, &QScreen::geometryChanged,
+                 this, &UIDesktopWidgetWatchdog::sltHandleHostScreenResized);
++#if QT_VERSION > QT_VERSION_CHECK(5, 4, 0)
+         connect(pHostScreen, &QScreen::availableGeometryChanged,
+                 this, &UIDesktopWidgetWatchdog::sltHandleHostScreenWorkAreaResized);
++#endif
+     }
+ 
+ #ifdef VBOX_WS_X11
+@@ -504,14 +512,18 @@
+     /* Cleanup connections: */
+     disconnect(qApp, &QGuiApplication::screenAdded,
+                this, &UIDesktopWidgetWatchdog::sltHostScreenAdded);
++#if QT_VERSION > QT_VERSION_CHECK(5, 4, 0)
+     disconnect(qApp, &QGuiApplication::screenRemoved,
+                this, &UIDesktopWidgetWatchdog::sltHostScreenRemoved);
++#endif
+     foreach (QScreen *pHostScreen, qApp->screens())
+     {
+         disconnect(pHostScreen, &QScreen::geometryChanged,
+                    this, &UIDesktopWidgetWatchdog::sltHandleHostScreenResized);
++#if QT_VERSION > QT_VERSION_CHECK(5, 4, 0)
+         disconnect(pHostScreen, &QScreen::availableGeometryChanged,
+                    this, &UIDesktopWidgetWatchdog::sltHandleHostScreenWorkAreaResized);
++#endif
+     }
+ 
+ #ifdef VBOX_WS_X11
+--- a/src/VBox/Frontends/VirtualBox/src/selector/UISnapshotPane.cpp	2020-07-09 19:56:49.000000000 +0300
++++ b/src/VBox/Frontends/VirtualBox/src/selector/UISnapshotPane.cpp	2023-03-03 04:24:52.247708773 +0300
+@@ -1255,6 +1255,7 @@
+ 
+ void UISnapshotPane::prepareToolbar()
+ {
++#if QT_VERSION > QT_VERSION_CHECK(5, 4, 0)
+     /* Create snapshot toolbar: */
+     m_pToolBar = new UIToolBar(this);
+     AssertPtrReturnVoid(m_pToolBar);
+@@ -1324,6 +1325,7 @@
+         /* Add into layout: */
+         layout()->addWidget(m_pToolBar);
+     }
++#endif
+ }
+ 
+ void UISnapshotPane::prepareTreeWidget()

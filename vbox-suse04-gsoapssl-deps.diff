@@ -1,0 +1,20 @@
+Index: VirtualBox-5.1.38/src/VBox/Main/webservice/Makefile.kmk
+===================================================================
+--- VirtualBox-5.1.38.orig/src/VBox/Main/webservice/Makefile.kmk
++++ VirtualBox-5.1.38/src/VBox/Main/webservice/Makefile.kmk
+@@ -327,6 +327,7 @@
+  vboxwebsrv_LIBS += \
+ 	$(PATH_STAGE_LIB)/vboxsoap$(VBOX_SUFF_LIB) \
+ 	$(VBOX_GSOAP_CXX_LIBS) \
++	ssl crypto z \
+ 	$(LIB_RUNTIME)
+  vboxwebsrv_LIBS.solaris += socket nsl
+  ifdef VBOX_WITH_WEBSERVICES_SSL
+@@ -509,6 +510,7 @@
+  webtest_LIBS += \
+ 	$(PATH_STAGE_LIB)/vboxsoap$(VBOX_SUFF_LIB) \
+ 	$(VBOX_GSOAP_CXX_LIBS) \
++	ssl crypto z \
+ 	$(LIB_RUNTIME)
+  webtest_LIBS.solaris += nsl
+  ifdef VBOX_WITH_WEBSERVICES_SSL

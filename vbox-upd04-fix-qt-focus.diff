@@ -1,0 +1,312 @@
+diff -uNr VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/extradata/UIExtraDataManager.cpp VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/extradata/UIExtraDataManager.cpp
+--- VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/extradata/UIExtraDataManager.cpp	2020-07-09 19:56:44.000000000 +0300
++++ VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/extradata/UIExtraDataManager.cpp	2022-08-21 01:18:48.665891890 +0300
+@@ -1165,7 +1165,7 @@
+     /* Compose initial file-name: */
+     const QString strInitialFileName = QDir(vboxGlobal().homeFolder()).absoluteFilePath(QString("%1_ExtraData.xml").arg(currentChooserName()));
+     /* Open file-save dialog to choose file to save extra-data into: */
+-    const QString strFileName = QIFileDialog::getSaveFileName(strInitialFileName, "XML files (*.xml)", this,
++    const QString strFileName = QIFileDialog::getSaveFileName(strInitialFileName, "XML files (*.xml)", QApplication::activeWindow(),
+                                                               "Choose file to save extra-data into..", 0, true, true);
+     /* Make sure file-name was chosen: */
+     if (strFileName.isEmpty())
+@@ -1252,7 +1252,7 @@
+     /* Compose initial file-name: */
+     const QString strInitialFileName = QDir(vboxGlobal().homeFolder()).absoluteFilePath(QString("%1_ExtraData.xml").arg(currentChooserName()));
+     /* Open file-open dialog to choose file to open extra-data into: */
+-    const QString strFileName = QIFileDialog::getOpenFileName(strInitialFileName, "XML files (*.xml)", this,
++    const QString strFileName = QIFileDialog::getOpenFileName(strInitialFileName, "XML files (*.xml)", QApplication::activeWindow(),
+                                                               "Choose file to load extra-data from..");
+     /* Make sure file-name was chosen: */
+     if (strFileName.isEmpty())
+diff -uNr VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/globals/VBoxGlobal.cpp VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/globals/VBoxGlobal.cpp
+--- VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/globals/VBoxGlobal.cpp	2020-07-09 19:56:45.000000000 +0300
++++ VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/globals/VBoxGlobal.cpp	2022-08-21 01:28:41.201900943 +0300
+@@ -1438,7 +1438,7 @@
+                 }
+                 /* Call for file-open dialog: */
+                 const QString strMachineFolder(QFileInfo(constMachine.GetSettingsFilePath()).absolutePath());
+-                const QString strMediumID = vboxGlobal().openMediumWithFileOpenDialog(target.mediumType, windowManager().mainWindowShown(),
++                const QString strMediumID = vboxGlobal().openMediumWithFileOpenDialog(target.mediumType, QApplication::activeWindow(),
+                                                                                       strMachineFolder);
+                 /* Return focus back: */
+                 if (pLastFocusedWidget)
+diff -uNr VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/medium/UIMediumDetailsWidget.cpp VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/medium/UIMediumDetailsWidget.cpp
+--- VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/medium/UIMediumDetailsWidget.cpp	2020-07-09 19:56:45.000000000 +0300
++++ VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/medium/UIMediumDetailsWidget.cpp	2022-08-21 01:22:16.549895066 +0300
+@@ -157,7 +157,7 @@
+     const QString strFileName = QIFileDialog::getSaveFileName(m_pEditorLocation->text(),
+                                                               QApplication::translate("UIMediumManager", "Current extension (*.%1)")
+                                                                  .arg(QFileInfo(m_oldData.m_options.m_strLocation).suffix()),
+-                                                              this,
++                                                              QApplication::activeWindow(),
+                                                               QApplication::translate("UIMediumManager", "Choose the location of this medium"),
+                                                               0, true, true);
+     if (!strFileName.isNull())
+diff -uNr VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/medium/UIMediumManager.cpp VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/medium/UIMediumManager.cpp
+--- VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/medium/UIMediumManager.cpp	2020-07-09 19:56:45.000000000 +0300
++++ VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/medium/UIMediumManager.cpp	2022-08-21 01:23:20.053896036 +0300
+@@ -267,7 +267,7 @@
+     const QString strFileName = QIFileDialog::getSaveFileName(location(),
+                                                               UIMediumManager::tr("Current extension (*.%1)")
+                                                                  .arg(QFileInfo(location()).suffix()),
+-                                                              treeWidget(),
++                                                              QApplication::activeWindow(),
+                                                               UIMediumManager::tr("Choose the location of this medium"),
+                                                               0, true, true);
+     /* Negative if nothing changed: */
+diff -uNr VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/net/UIDownloaderAdditions.cpp VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/net/UIDownloaderAdditions.cpp
+--- VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/net/UIDownloaderAdditions.cpp	2020-07-09 19:56:45.000000000 +0300
++++ VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/net/UIDownloaderAdditions.cpp	2022-08-21 01:23:53.561896548 +0300
+@@ -178,7 +178,7 @@
+ 
+         /* Ask the user for another location for the additions-image file: */
+         QString strTarget = QIFileDialog::getExistingDirectory(QFileInfo(target()).absolutePath(),
+-                                                               windowManager().networkManagerOrMainWindowShown(),
++                                                               QApplication::activeWindow(),
+                                                                tr("Select folder to save Guest Additions image to"), true);
+ 
+         /* Check if user had really set a new target: */
+diff -uNr VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/net/UIDownloaderExtensionPack.cpp VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/net/UIDownloaderExtensionPack.cpp
+--- VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/net/UIDownloaderExtensionPack.cpp	2020-07-09 19:56:45.000000000 +0300
++++ VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/net/UIDownloaderExtensionPack.cpp	2022-08-21 01:24:26.937897058 +0300
+@@ -179,7 +179,7 @@
+ 
+         /* Ask the user for another location for the extension-pack file: */
+         QString strTarget = QIFileDialog::getExistingDirectory(QFileInfo(target()).absolutePath(),
+-                                                               windowManager().networkManagerOrMainWindowShown(),
++                                                               QApplication::activeWindow(),
+                                                                tr("Select folder to save %1 to").arg(GUI_ExtPackName), true);
+ 
+         /* Check if user had really set a new target: */
+diff -uNr VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/net/UIDownloaderUserManual.cpp VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/net/UIDownloaderUserManual.cpp
+--- VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/net/UIDownloaderUserManual.cpp	2020-07-09 19:56:45.000000000 +0300
++++ VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/net/UIDownloaderUserManual.cpp	2022-08-21 01:24:17.161896909 +0300
+@@ -121,7 +121,7 @@
+ 
+         /* Ask the user for another location for the user-manual file: */
+         QString strTarget = QIFileDialog::getExistingDirectory(QFileInfo(target()).absolutePath(),
+-                                                               windowManager().networkManagerOrMainWindowShown(),
++                                                               QApplication::activeWindow(),
+                                                                tr("Select folder to save User Manual to"), true);
+ 
+         /* Check if user had really set a new target: */
+diff -uNr VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/runtime/UIMachineLogic.cpp VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/runtime/UIMachineLogic.cpp
+--- VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/runtime/UIMachineLogic.cpp	2020-07-09 19:56:47.000000000 +0300
++++ VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/runtime/UIMachineLogic.cpp	2022-08-21 01:26:37.005899045 +0300
+@@ -1810,7 +1810,7 @@
+     /* Request the filename from the user: */
+     const QString strFilename = QIFileDialog::getSaveFileName(strDefaultFileName,
+                                                               filters.join(";;"),
+-                                                              activeMachineWindow(),
++                                                              QApplication::activeWindow(),
+                                                               tr("Select a filename for the screenshot ..."),
+                                                               &strFilter,
+                                                               true /* resolve symlinks */,
+diff -uNr VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/selector/UISelectorWindow.cpp VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/selector/UISelectorWindow.cpp
+--- VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/selector/UISelectorWindow.cpp	2020-07-09 19:56:48.000000000 +0300
++++ VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/selector/UISelectorWindow.cpp	2022-08-21 01:18:24.209891516 +0300
+@@ -594,7 +594,7 @@
+             extensions << QString("*.%1").arg(VBoxFileExts[i]);
+         QString strFilter = tr("Virtual machine files (%1)").arg(extensions.join(" "));
+         /* Create open file dialog: */
+-        QStringList fileNames = QIFileDialog::getOpenFileNames(strBaseFolder, strFilter, this, strTitle, 0, true, true);
++        QStringList fileNames = QIFileDialog::getOpenFileNames(strBaseFolder, strFilter, QApplication::activeWindow(), strTitle, 0, true, true);
+         if (!fileNames.isEmpty())
+             strTmpFile = fileNames.at(0);
+     }
+diff -uNr VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/settings/global/UIGlobalSettingsExtension.cpp VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/settings/global/UIGlobalSettingsExtension.cpp
+--- VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/settings/global/UIGlobalSettingsExtension.cpp	2020-07-09 19:56:50.000000000 +0300
++++ VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/settings/global/UIGlobalSettingsExtension.cpp	2022-08-21 01:26:02.369898516 +0300
+@@ -382,7 +382,7 @@
+         extensions << QString("*.%1").arg(VBoxExtPackFileExts[i]);
+     const QString strFilter = tr("Extension package files (%1)").arg(extensions.join(" "));
+ 
+-    const QStringList fileNames = QIFileDialog::getOpenFileNames(strBaseFolder, strFilter, this, strTitle, 0, true, true);
++    const QStringList fileNames = QIFileDialog::getOpenFileNames(strBaseFolder, strFilter, QApplication::activeWindow(), strTitle, 0, true, true);
+ 
+     QString strFilePath;
+     if (!fileNames.isEmpty())
+diff -uNr VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/settings/machine/UIMachineSettingsStorage.cpp VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/settings/machine/UIMachineSettingsStorage.cpp
+--- VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/settings/machine/UIMachineSettingsStorage.cpp	2020-07-09 19:56:51.000000000 +0300
++++ VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/settings/machine/UIMachineSettingsStorage.cpp	2022-08-21 01:29:15.669901469 +0300
+@@ -3095,7 +3095,7 @@
+ void UIMachineSettingsStorage::sltChooseExistingMedium()
+ {
+     const QString strMachineFolder(QFileInfo(m_strMachineSettingsFilePath).absolutePath());
+-    const QString strMediumId = vboxGlobal().openMediumWithFileOpenDialog(m_pMediumIdHolder->type(), this, strMachineFolder);
++    const QString strMediumId = vboxGlobal().openMediumWithFileOpenDialog(m_pMediumIdHolder->type(), QApplication::activeWindow(), strMachineFolder);
+     if (!strMediumId.isNull())
+         m_pMediumIdHolder->setId(strMediumId);
+ }
+@@ -3806,7 +3806,7 @@
+             if (iAnswer == AlertButton_Choice1)
+                 strMediumId = getWithNewHDWizard();
+             else if (iAnswer == AlertButton_Choice2)
+-                strMediumId = vboxGlobal().openMediumWithFileOpenDialog(UIMediumType_HardDisk, this, strMachineFolder);
++                strMediumId = vboxGlobal().openMediumWithFileOpenDialog(UIMediumType_HardDisk, QApplication::activeWindow(), strMachineFolder);
+             break;
+         }
+         case KDeviceType_DVD:
+@@ -3815,7 +3815,7 @@
+             if (iAnswer == AlertButton_Choice1)
+                 strMediumId = vboxGlobal().medium(strMediumId).id();
+             else if (iAnswer == AlertButton_Choice2)
+-                strMediumId = vboxGlobal().openMediumWithFileOpenDialog(UIMediumType_DVD, this, strMachineFolder);
++                strMediumId = vboxGlobal().openMediumWithFileOpenDialog(UIMediumType_DVD, QApplication::activeWindow(), strMachineFolder);
+             break;
+         }
+         case KDeviceType_Floppy:
+@@ -3824,7 +3824,7 @@
+             if (iAnswer == AlertButton_Choice1)
+                 strMediumId = vboxGlobal().medium(strMediumId).id();
+             else if (iAnswer == AlertButton_Choice2)
+-                strMediumId = vboxGlobal().openMediumWithFileOpenDialog(UIMediumType_Floppy, this, strMachineFolder);
++                strMediumId = vboxGlobal().openMediumWithFileOpenDialog(UIMediumType_Floppy, QApplication::activeWindow(), strMachineFolder);
+             break;
+         }
+         default: break; /* Shut up, MSC! */
+diff -uNr VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/UIVMLogViewer.cpp VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/UIVMLogViewer.cpp
+--- VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/UIVMLogViewer.cpp	2020-07-09 19:56:43.000000000 +0300
++++ VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/UIVMLogViewer.cpp	2022-08-21 01:18:14.665891370 +0300
+@@ -900,7 +900,7 @@
+     /* Show "save as" dialog: */
+     const QString strNewFileName = QIFileDialog::getSaveFileName(strDefaultFullName,
+                                                                  "",
+-                                                                 this,
++                                                                 QApplication::activeWindow(),
+                                                                  tr("Save VirtualBox Log As"),
+                                                                  0 /* selected filter */,
+                                                                  true /* resolve symlinks */,
+diff -uNr VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/widgets/UIEmptyFilePathSelector.cpp VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/widgets/UIEmptyFilePathSelector.cpp
+--- VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/widgets/UIEmptyFilePathSelector.cpp	2020-07-09 19:56:51.000000000 +0300
++++ VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/widgets/UIEmptyFilePathSelector.cpp	2022-08-21 01:20:42.801893634 +0300
+@@ -220,16 +220,16 @@
+     switch (mMode)
+     {
+         case UIEmptyFilePathSelector::Mode_File_Open:
+-            path = QIFileDialog::getOpenFileName (initDir, mFileFilters, parentWidget(), mFileDialogTitle); break;
++            path = QIFileDialog::getOpenFileName (initDir, mFileFilters, QApplication::activeWindow(), mFileDialogTitle); break;
+         case UIEmptyFilePathSelector::Mode_File_Save:
+         {
+-            path = QIFileDialog::getSaveFileName (initDir, mFileFilters, parentWidget(), mFileDialogTitle);
++            path = QIFileDialog::getSaveFileName (initDir, mFileFilters, QApplication::activeWindow(), mFileDialogTitle);
+             if (!path.isEmpty() && QFileInfo (path).suffix().isEmpty())
+                 path = QString ("%1.%2").arg (path).arg (mDefaultSaveExt);
+             break;
+         }
+         case UIEmptyFilePathSelector::Mode_Folder:
+-            path = QIFileDialog::getExistingDirectory (initDir, parentWidget(), mFileDialogTitle); break;
++            path = QIFileDialog::getExistingDirectory (initDir, QApplication::activeWindow(), mFileDialogTitle); break;
+     }
+     if (path.isEmpty())
+         return;
+diff -uNr VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/widgets/UIFilePathSelector.cpp VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/widgets/UIFilePathSelector.cpp
+--- VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/widgets/UIFilePathSelector.cpp	2020-07-09 19:56:51.000000000 +0300
++++ VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/widgets/UIFilePathSelector.cpp	2022-08-21 01:20:00.489892987 +0300
+@@ -386,10 +386,10 @@
+     switch (m_enmMode)
+     {
+         case Mode_File_Open:
+-            strSelPath = QIFileDialog::getOpenFileName(strInitDir, m_strFileDialogFilters, parentWidget(), m_strFileDialogTitle); break;
++            strSelPath = QIFileDialog::getOpenFileName(strInitDir, m_strFileDialogFilters, QApplication::activeWindow(), m_strFileDialogTitle); break;
+         case Mode_File_Save:
+         {
+-            strSelPath = QIFileDialog::getSaveFileName(strInitDir, m_strFileDialogFilters, parentWidget(), m_strFileDialogTitle);
++            strSelPath = QIFileDialog::getSaveFileName(strInitDir, m_strFileDialogFilters, QApplication::activeWindow(), m_strFileDialogTitle);
+             if (!strSelPath.isEmpty() && QFileInfo(strSelPath).suffix().isEmpty())
+             {
+                 if (m_strFileDialogDefaultSaveExtension.isEmpty())
+@@ -400,7 +400,7 @@
+             break;
+         }
+         case Mode_Folder:
+-            strSelPath = QIFileDialog::getExistingDirectory(strInitDir, parentWidget(), m_strFileDialogTitle); break;
++            strSelPath = QIFileDialog::getExistingDirectory(strInitDir, QApplication::activeWindow(), m_strFileDialogTitle); break;
+     }
+ 
+     /* Do nothing if nothing chosen: */
+diff -uNr VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/widgets/UILineTextEdit.cpp VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/widgets/UILineTextEdit.cpp
+--- VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/widgets/UILineTextEdit.cpp	2020-07-09 19:56:51.000000000 +0300
++++ VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/widgets/UILineTextEdit.cpp	2022-08-21 01:20:57.401893857 +0300
+@@ -83,7 +83,7 @@
+ 
+ void UITextEditor::open()
+ {
+-    QString fileName = QIFileDialog::getOpenFileName(vboxGlobal().documentsPath(), tr("Text (*.txt);;All (*.*)"), this, tr("Select a file to open..."));
++    QString fileName = QIFileDialog::getOpenFileName(vboxGlobal().documentsPath(), tr("Text (*.txt);;All (*.*)"), QApplication::activeWindow(), tr("Select a file to open..."));
+     if (!fileName.isEmpty())
+     {
+         QFile file(fileName);
+diff -uNr VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/wizards/clonevd/UIWizardCloneVDPageBasic1.cpp VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/wizards/clonevd/UIWizardCloneVDPageBasic1.cpp
+--- VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/wizards/clonevd/UIWizardCloneVDPageBasic1.cpp	2020-07-09 19:56:53.000000000 +0300
++++ VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/wizards/clonevd/UIWizardCloneVDPageBasic1.cpp	2022-08-21 01:27:54.221900225 +0300
+@@ -44,7 +44,7 @@
+     /* Get current virtual-disk medium type: */
+     const UIMediumType enmMediumType = UIMediumDefs::mediumTypeToLocal(sourceVirtualDisk().GetDeviceType());
+     /* Get source virtual-disk using file-open dialog: */
+-    QString strMediumId = vboxGlobal().openMediumWithFileOpenDialog(enmMediumType, thisImp());
++    QString strMediumId = vboxGlobal().openMediumWithFileOpenDialog(enmMediumType, QApplication::activeWindow());
+     if (!strMediumId.isNull())
+     {
+         /* Update medium-combo if necessary: */
+diff -uNr VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/wizards/clonevd/UIWizardCloneVDPageBasic4.cpp VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/wizards/clonevd/UIWizardCloneVDPageBasic4.cpp
+--- VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/wizards/clonevd/UIWizardCloneVDPageBasic4.cpp	2020-07-09 19:56:53.000000000 +0300
++++ VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/wizards/clonevd/UIWizardCloneVDPageBasic4.cpp	2022-08-21 01:21:28.721894335 +0300
+@@ -83,7 +83,7 @@
+ 
+     /* Open corresponding file-dialog: */
+     QString strChosenFilePath = QIFileDialog::getSaveFileName(folder.absoluteFilePath(strFileName),
+-                                                              strBackendsList, thisImp(),
++                                                              strBackendsList, QApplication::activeWindow(),
+                                                               UIWizardCloneVD::tr("Please choose a location for new virtual disk image file"));
+ 
+     /* If there was something really chosen: */
+diff -uNr VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/wizards/firstrun/UIWizardFirstRunPageBasic.cpp VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/wizards/firstrun/UIWizardFirstRunPageBasic.cpp
+--- VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/wizards/firstrun/UIWizardFirstRunPageBasic.cpp	2020-07-09 19:56:53.000000000 +0300
++++ VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/wizards/firstrun/UIWizardFirstRunPageBasic.cpp	2022-08-21 01:28:02.005900344 +0300
+@@ -45,7 +45,7 @@
+ void UIWizardFirstRunPage::onOpenMediumWithFileOpenDialog()
+ {
+     /* Get opened vboxMedium id: */
+-    QString strMediumId = vboxGlobal().openMediumWithFileOpenDialog(m_pMediaSelector->type(), thisImp());
++    QString strMediumId = vboxGlobal().openMediumWithFileOpenDialog(m_pMediaSelector->type(), QApplication::activeWindow());
+     /* Update medium-combo if necessary: */
+     if (!strMediumId.isNull())
+         m_pMediaSelector->setCurrentItem(strMediumId);
+diff -uNr VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/wizards/importappliance/UIWizardImportApp.cpp VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/wizards/importappliance/UIWizardImportApp.cpp
+--- VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/wizards/importappliance/UIWizardImportApp.cpp	2020-07-09 19:56:53.000000000 +0300
++++ VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/wizards/importappliance/UIWizardImportApp.cpp	2022-08-21 01:21:08.377894024 +0300
+@@ -102,7 +102,7 @@
+     void sltSave()
+     {
+         QString fileName = QIFileDialog::getSaveFileName(vboxGlobal().documentsPath(), tr("Text (*.txt)"),
+-                                                         this, tr("Save license to file..."));
++                                                         QApplication::activeWindow(), tr("Save license to file..."));
+         if (!fileName.isEmpty())
+         {
+             QFile file(fileName);
+diff -uNr VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/wizards/newvd/UIWizardNewVDPageBasic3.cpp VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/wizards/newvd/UIWizardNewVDPageBasic3.cpp
+--- VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/wizards/newvd/UIWizardNewVDPageBasic3.cpp	2020-07-09 19:56:54.000000000 +0300
++++ VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/wizards/newvd/UIWizardNewVDPageBasic3.cpp	2022-08-21 01:21:38.689894488 +0300
+@@ -94,7 +94,7 @@
+ 
+     /* Open corresponding file-dialog: */
+     QString strChosenFilePath = QIFileDialog::getSaveFileName(folder.absoluteFilePath(strFileName),
+-                                                              strBackendsList, thisImp(),
++                                                              strBackendsList, QApplication::activeWindow(),
+                                                               VBoxGlobal::tr("Please choose a location for new virtual hard disk file"));
+ 
+     /* If there was something really chosen: */
+diff -uNr VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/wizards/newvm/UIWizardNewVMPageBasic3.cpp VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/wizards/newvm/UIWizardNewVMPageBasic3.cpp
+--- VirtualBox-5.2.44/src/VBox/Frontends/VirtualBox/src/wizards/newvm/UIWizardNewVMPageBasic3.cpp	2020-07-09 19:56:54.000000000 +0300
++++ VirtualBox-5.2.44_fix/src/VBox/Frontends/VirtualBox/src/wizards/newvm/UIWizardNewVMPageBasic3.cpp	2022-08-21 01:28:11.157900484 +0300
+@@ -67,7 +67,7 @@
+ void UIWizardNewVMPage3::getWithFileOpenDialog()
+ {
+     /* Get opened medium id: */
+-    QString strMediumId = vboxGlobal().openMediumWithFileOpenDialog(UIMediumType_HardDisk, thisImp());
++    QString strMediumId = vboxGlobal().openMediumWithFileOpenDialog(UIMediumType_HardDisk, QApplication::activeWindow());
+     if (!strMediumId.isNull())
+     {
+         /* Update medium-combo if necessary: */

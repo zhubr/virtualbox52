@@ -1,0 +1,13 @@
+--- VirtualBox-5.2.44_old/src/VBox/Frontends/VirtualBox/src/main.cpp	2022-08-16 14:10:37.423330489 +0300
++++ VirtualBox-5.2.44_new/src/VBox/Frontends/VirtualBox/src/main.cpp	2022-08-16 14:08:07.000000000 +0300
+@@ -660,6 +660,10 @@
+ # endif
+ #endif /* VBOX_WS_MAC */
+ 
++# ifdef RT_OS_LINUX
++        QCoreApplication::setSetuidAllowed(true); /* -- n.zhubr */
++# endif
++
+ #ifdef VBOX_WS_X11
+ # if defined(RT_OS_LINUX) && defined(DEBUG)
+         /* Install signal handler to backtrace the call stack: */

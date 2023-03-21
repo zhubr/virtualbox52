@@ -1,0 +1,75 @@
+--- a/src/VBox/Installer/linux/vboxdrv.sh.orig
++++ b/src/VBox/Installer/linux/vboxdrv.sh
+@@ -21,7 +21,7 @@
+ # Provides:       vboxdrv
+ # Required-Start: $syslog
+ # Required-Stop:
+-# Default-Start:  2 3 4 5
++# Default-Start:  2 5
+ # Default-Stop:   0 1 6
+ # Short-Description: VirtualBox Linux kernel module
+ ### END INIT INFO
+@@ -285,13 +285,6 @@
+         fi
+     fi
+     # ensure permissions
+-    if ! chown :"${GROUP}" $DEVICE 2>/dev/null; then
+-        rmmod vboxpci 2>/dev/null
+-        rmmod vboxnetadp 2>/dev/null
+-        rmmod vboxnetflt 2>/dev/null
+-        rmmod vboxdrv 2>/dev/null
+-        failure "Cannot change group ${GROUP} for device $DEVICE"
+-    fi
+     if ! $MODPROBE vboxnetflt > /dev/null 2>&1; then
+         failure "modprobe vboxnetflt failed. Please use 'dmesg' to find out why"
+     fi
+@@ -420,47 +413,8 @@
+ # setup_script
+ setup()
+ {
+-    begin_msg "Building VirtualBox kernel modules" console
+-    log "Building the main VirtualBox module."
+-    if ! myerr=`$BUILDINTMP \
+-        --save-module-symvers /tmp/vboxdrv-Module.symvers \
+-        --module-source "$MODULE_SRC/vboxdrv" \
+-        --no-print-directory install 2>&1`; then
+-        "${INSTALL_DIR}/check_module_dependencies.sh" || exit 1
+-        log "Error building the module:"
+-        module_build_log "$myerr"
+-        failure "Look at $LOG to find out what went wrong"
+-    fi
+-    log "Building the net filter module."
+-    if ! myerr=`$BUILDINTMP \
+-        --use-module-symvers /tmp/vboxdrv-Module.symvers \
+-        --module-source "$MODULE_SRC/vboxnetflt" \
+-        --no-print-directory install 2>&1`; then
+-        log "Error building the module:"
+-        module_build_log "$myerr"
+-        failure "Look at $LOG to find out what went wrong"
+-    fi
+-    log "Building the net adaptor module."
+-    if ! myerr=`$BUILDINTMP \
+-        --use-module-symvers /tmp/vboxdrv-Module.symvers \
+-        --module-source "$MODULE_SRC/vboxnetadp" \
+-        --no-print-directory install 2>&1`; then
+-        log "Error building the module:"
+-        module_build_log "$myerr"
+-        failure "Look at $LOG to find out what went wrong"
+-    fi
+-    log "Building the PCI pass-through module."
+-    if ! myerr=`$BUILDINTMP \
+-        --use-module-symvers /tmp/vboxdrv-Module.symvers \
+-        --module-source "$MODULE_SRC/vboxpci" \
+-        --no-print-directory install 2>&1`; then
+-        log "Error building the module:"
+-        module_build_log "$myerr"
+-        failure "Look at $LOG to find out what went wrong"
+-    fi
+-    rm -f /etc/vbox/module_not_compiled
+-    depmod -a
+-    succ_msg "VirtualBox kernel modules built"
++    begin_msg "Recompiling VirtualBox kernel module(s) is not supposed in this package."
++    succ_msg
+ }
+ 
+ dmnstatus()

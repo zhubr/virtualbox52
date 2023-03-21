@@ -1,0 +1,11 @@
+diff -urN VirtualBox-5.1.38.old/src/VBox/ExtPacks/VBoxDTrace/onnv/lib/libdtrace/common/dt_subr.c VirtualBox-5.1.38/src/VBox/ExtPacks/VBoxDTrace/onnv/lib/libdtrace/common/dt_subr.c
+--- VirtualBox-5.1.38.old/src/VBox/ExtPacks/VBoxDTrace/onnv/lib/libdtrace/common/dt_subr.c	2015-07-14 20:53:12.120479323 +0200
++++ VirtualBox-5.1.38/src/VBox/ExtPacks/VBoxDTrace/onnv/lib/libdtrace/common/dt_subr.c	2015-07-19 17:12:35.554945664 +0200
+@@ -891,6 +891,7 @@
+ 	return (x & 0x7F);
+ #endif
+ #endif /* !VBOX */
++	return 0;
+ }
+ 
+ /*

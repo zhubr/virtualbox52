@@ -1,0 +1,137 @@
+
+  This patch addresses the removal of *_vm_area() functions from newer linux 
+  kernels. Essentially, to not depend on allocations within modules' address 
+  space, vmm ring 0 modules can be compiled with 64-bit fixups instead of 
+  32-bit fixups. This is what -mcmodel=large does. After that, any regular
+  allocations will do, hence no need for *_vm_area().
+
+  Cherry-picking with some adaptations from:
+    https://www.virtualbox.org/changeset/85507/vbox/trunk
+
+  Important note: this patch can not work with dtrace. Please disable dtrace.
+
+--- a/Config.kmk	2023-03-11 19:54:55.000000000 +0300
++++ b/Config.kmk	2023-03-12 01:42:54.211867524 +0300
+@@ -4361,8 +4361,8 @@
+ TEMPLATE_VBoxR0_TOOL                = $(VBOX_GCC_TOOL)
+ TEMPLATE_VBoxR0_CFLAGS              = -fno-pie -nostdinc -g $(VBOX_GCC_pipe) $(VBOX_GCC_WERR) $(VBOX_GCC_PEDANTIC_C)   $(VBOX_GCC_Wno-variadic-macros) $(VBOX_GCC_R0_OPT) $(VBOX_GCC_R0_FP) -fno-strict-aliasing -fno-exceptions $(VBOX_GCC_fno-stack-protector) -fno-common $(VBOX_GCC_fvisibility-hidden) -std=gnu99 $(VBOX_GCC_IPRT_FMT_CHECK)
+ TEMPLATE_VBoxR0_CXXFLAGS            = -fno-pie -nostdinc -g $(VBOX_GCC_pipe) $(VBOX_GCC_WERR) $(VBOX_GCC_PEDANTIC_CXX) $(VBOX_GCC_Wno-variadic-macros) $(VBOX_GCC_R0_OPT) $(VBOX_GCC_R0_FP) -fno-strict-aliasing -fno-exceptions $(VBOX_GCC_fno-stack-protector) -fno-common $(VBOX_GCC_fvisibility-inlines-hidden) $(VBOX_GCC_fvisibility-hidden) -fno-rtti $(VBOX_GCC_IPRT_FMT_CHECK)
+-TEMPLATE_VBoxR0_CFLAGS.amd64        = -m64 -mno-red-zone -mcmodel=kernel -mno-sse -mno-mmx -mno-sse2 -mno-3dnow -fno-asynchronous-unwind-tables -ffreestanding
+-TEMPLATE_VBoxR0_CXXFLAGS.amd64      = -m64 -mno-red-zone -mcmodel=kernel -mno-sse -mno-mmx -mno-sse2 -mno-3dnow -fno-asynchronous-unwind-tables
++TEMPLATE_VBoxR0_CFLAGS.amd64        = -m64 -mno-red-zone -mcmodel=large -mno-sse -mno-mmx -mno-sse2 -mno-3dnow -fno-asynchronous-unwind-tables -ffreestanding
++TEMPLATE_VBoxR0_CXXFLAGS.amd64      = -m64 -mno-red-zone -mcmodel=large -mno-sse -mno-mmx -mno-sse2 -mno-3dnow -fno-asynchronous-unwind-tables
+ ifeq ($(KBUILD_TARGET),solaris)
+  TEMPLATE_VBoxR0_LDFLAGS            = -r
+  TEMPLATE_VBoxR0_LDFLAGS.solaris    = -u _init -u _info
+--- a/src/VBox/HostDrivers/Support/SUPDrvInternal.h	2020-07-09 19:56:59.000000000 +0300
++++ b/src/VBox/HostDrivers/Support/SUPDrvInternal.h	2023-02-27 02:20:50.626384466 +0300
+@@ -142,6 +142,14 @@
+ # define SUPDRV_USE_MUTEX_FOR_GIP
+ #endif
+ 
++#ifdef RT_OS_LINUX
++/** Use the RTR0MemObj API rather than the RTMemExecAlloc for the images.
++ * This is a good idea in general, but a necessity for @bugref{9801}. */
++#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 8, 0)
++# define SUPDRV_USE_MEMOBJ_FOR_LDR_IMAGE
++#endif
++#endif
++
+ 
+ /**
+  * OS debug print macro.
+@@ -323,10 +331,15 @@
+     struct SUPDRVLDRIMAGE * volatile pNext;
+     /** Pointer to the image. */
+     void                           *pvImage;
++#ifdef SUPDRV_USE_MEMOBJ_FOR_LDR_IMAGE
++    /** The memory object for the module allocation. */
++    RTR0MEMOBJ                      hMemObjImage;
++#else
+     /** Pointer to the allocated image buffer.
+      * pvImage is 32-byte aligned or it may governed by the native loader (this
+      * member is NULL then). */
+     void                           *pvImageAlloc;
++#endif
+     /** Size of the image including the tables. This is mainly for verification
+      * of the load request. */
+     uint32_t                        cbImageWithTabs;
+--- a/src/VBox/HostDrivers/Support/SUPDrv.cpp	2020-07-09 19:56:59.000000000 +0300
++++ b/src/VBox/HostDrivers/Support/SUPDrv.cpp	2023-03-03 19:58:43.513324588 +0300
+@@ -3618,7 +3618,7 @@
+      * Let IPRT do the work.
+      */
+     if (ppvR0)
+-        rc = RTR0MemObjAllocPage(&Mem.MemObj, (size_t)cPages * PAGE_SIZE, true /* fExecutable */);
++        rc = RTR0MemObjAllocPage(&Mem.MemObj, (size_t)cPages * PAGE_SIZE, false /*fExecutable*/);
+     else
+         rc = RTR0MemObjAllocPhysNC(&Mem.MemObj, (size_t)cPages * PAGE_SIZE, NIL_RTHCPHYS);
+     if (RT_SUCCESS(rc))
+@@ -4927,7 +4927,11 @@
+      */
+     pImage = (PSUPDRVLDRIMAGE)pv;
+     pImage->pvImage         = NULL;
++#ifdef SUPDRV_USE_MEMOBJ_FOR_LDR_IMAGE
++    pImage->hMemObjImage    = NIL_RTR0MEMOBJ;
++#else
+     pImage->pvImageAlloc    = NULL;
++#endif
+     pImage->cbImageWithTabs = pReq->u.In.cbImageWithTabs;
+     pImage->cbImageBits     = pReq->u.In.cbImageBits;
+     pImage->cSymbols        = 0;
+@@ -4950,10 +4954,19 @@
+     rc = supdrvOSLdrOpen(pDevExt, pImage, pReq->u.In.szFilename);
+     if (rc == VERR_NOT_SUPPORTED)
+     {
++#ifdef SUPDRV_USE_MEMOBJ_FOR_LDR_IMAGE
++        rc = RTR0MemObjAllocPage(&pImage->hMemObjImage, pImage->cbImageBits, true /*fExecutable*/);
++        if (RT_SUCCESS(rc))
++        {
++            pImage->pvImage = RTR0MemObjAddress(pImage->hMemObjImage);
++            pImage->fNative = false;
++        }
++#else
+         pImage->pvImageAlloc = RTMemExecAlloc(pImage->cbImageBits + 31);
+         pImage->pvImage     = RT_ALIGN_P(pImage->pvImageAlloc, 32);
+         pImage->fNative     = false;
+         rc = pImage->pvImageAlloc ? VINF_SUCCESS : VERR_NO_EXEC_MEMORY;
++#endif
+         SUPDRV_CHECK_SMAP_CHECK(pDevExt, RT_NOTHING);
+     }
+     if (RT_FAILURE(rc))
+@@ -5200,7 +5213,20 @@
+             rc = supdrvOSLdrLoad(pDevExt, pImage, pReq->u.In.abImage, pReq);
+         else
+         {
++#ifdef SUPDRV_USE_MEMOBJ_FOR_LDR_IMAGE
++            uint32_t fProt_all = RTMEM_PROT_WRITE | RTMEM_PROT_EXEC | RTMEM_PROT_READ;
++            size_t aligned_cb = RT_ALIGN_32(pImage->cbImageBits, PAGE_SIZE); /* Align size to avoid upsetting RTR0MemObjProtect. */
++
+             memcpy(pImage->pvImage, &pReq->u.In.abImage[0], pImage->cbImageBits);
++
++            rc = RTR0MemObjProtect(pImage->hMemObjImage, 0 /* offset */, aligned_cb /* length */, fProt_all);
++            if (RT_SUCCESS(rc))
++                /* Good! */ ;
++            else
++                rc = supdrvLdrLoadError(rc, pReq, "RTR0MemObjProtect failed fProt=%#x", fProt_all);
++#else
++            memcpy(pImage->pvImage, &pReq->u.In.abImage[0], pImage->cbImageBits);
++#endif
+             Log(("vboxdrv: Loaded '%s' at %p\n", pImage->szName, pImage->pvImage));
+         }
+         SUPDRV_CHECK_SMAP_CHECK(pDevExt, RT_NOTHING);
+@@ -5784,8 +5810,14 @@
+     pImage->pDevExt = NULL;
+     pImage->pNext   = NULL;
+     pImage->uState  = SUP_IOCTL_LDR_FREE;
++#ifdef SUPDRV_USE_MEMOBJ_FOR_LDR_IMAGE
++    RTR0MemObjFree(pImage->hMemObjImage, true /*fMappings*/);
++    pImage->hMemObjImage = NIL_RTR0MEMOBJ;
++#else
+     RTMemExecFree(pImage->pvImageAlloc, pImage->cbImageBits + 31);
+     pImage->pvImageAlloc = NULL;
++#endif
++    pImage->pvImage = NULL;
+     RTMemFree(pImage->pachStrTab);
+     pImage->pachStrTab = NULL;
+     RTMemFree(pImage->paSymbols);
